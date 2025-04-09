@@ -1,14 +1,23 @@
 #include "sat.h"
 
+#define WATCHED_INDEX(value) ((value > 0) ? value : -value + variable_amount)
+
 //===================================================
 
-CDCL::CDCL(std::vector<std::vector<int>>& cnf, int variable_amount)
+CDCL::CDCL(std::vector<std::vector<int>>& cnf, int variable_amount, int clause_amount) : variable_amount(variable_amount), clause_amount(clause_amount)
 {
+    watched_map.resize(variable_amount * 2 + 1, std::vector<int>());
     for (auto& clause : cnf)
         add_clause(clause);
 
     for (int i = 1; i <= variable_amount; ++ i)
         activity.push_back(0.0);
+
+    // for (int i = 1; i <
+    var_conditions.resize(variable_amount + 1);
+    for (int i = 1; i < variable_amount + 1; i++)
+        var_conditions[i] = {0, 0, 0, false};
+
 }
 
 //====================================================
@@ -20,12 +29,10 @@ bool CDCL::process_algorithm()
     while (true)
     {
         bool result = unit_propagate(conflict_clause_index);
-
         if (!result)
         {
             if (current_level == 0)
                 return false;
-
 
             increase_activity(conflict_clause_index);
 
@@ -60,7 +67,6 @@ bool CDCL::process_algorithm()
         current_level++;
         assign_literal(var, -1);
     }
-    return false;
 }
 //====================================
 
@@ -70,13 +76,13 @@ void CDCL::add_clause(std::vector<int>& disjunct)
     if (disjunct.size() >= 2)
     {
         clause = {disjunct, disjunct[0], disjunct[1]};
-        watched_map[disjunct[0]].push_back(clauses.size());
-        watched_map[disjunct[1]].push_back(clauses.size());
+        watched_map[WATCHED_INDEX(disjunct[0])].push_back(clauses.size());
+        watched_map[WATCHED_INDEX(disjunct[1])].push_back(clauses.size());
     }
     else
     {
         clause = {disjunct, disjunct[0], 0};
-        watched_map[disjunct[0]].push_back(clauses.size());
+        watched_map[WATCHED_INDEX(disjunct[0])].push_back(clauses.size());
     }
 
     clauses.push_back(clause);
@@ -141,9 +147,7 @@ int CDCL::choose_variable()
 void CDCL::increase_activity(int conflict_clause_index)
 {
     for (int lit : clauses[conflict_clause_index].literals)
-    {
         activity[abs(lit)-1] += bump;
-    }
     bump /= 0.95;
 }
 
@@ -151,10 +155,9 @@ void CDCL::increase_activity(int conflict_clause_index)
 
 void CDCL::assign_literal(int lit, int reason_clause_index)
 {
-    var_conditions[abs(lit)] = {lit > 0, current_level, reason_clause_index};
+    var_conditions[abs(lit)] = {lit > 0, current_level, reason_clause_index, true};
     propagation_queue.push_back(lit);
     condition_stack.push(abs(lit));
-    assert(lit != 0);
 }
 
 //=====================================
@@ -175,7 +178,7 @@ bool CDCL::unit_propagate(int& conflict_clause_index)
                 continue;
             assert(lit != 0);
             int counter = 0;
-            std::vector<int> copy_list = watched_map[-lit];
+            std::vector<int> copy_list = watched_map[WATCHED_INDEX(-lit)];
             for (int i = 0; i < copy_list.size(); i++)
             {
 
@@ -200,12 +203,9 @@ bool CDCL::unit_propagate(int& conflict_clause_index)
                             clause.watched1 = other_lit;
                         else if (clause.watched2 == -lit)
                             clause.watched2 = other_lit;
-                        else
-                            assert(false);
 
-                        assert(other_lit != 0);
-                        watched_map[other_lit].push_back(clause_idx);
-                        watched_map[-lit].erase(std::find(watched_map[-lit].begin(), watched_map[-lit].end(), clause_idx));
+                        watched_map[WATCHED_INDEX(other_lit)].push_back(clause_idx);
+                        watched_map[WATCHED_INDEX(-lit)].erase(std::find(watched_map[WATCHED_INDEX(-lit)].begin(), watched_map[WATCHED_INDEX(-lit)].end(), clause_idx));
                         found_new_watched = true;
                         break;
                     }
@@ -219,7 +219,6 @@ bool CDCL::unit_propagate(int& conflict_clause_index)
                     if (!lit_is_assigned(other_watch))
                     {
                         assign_literal(other_watch, clause_idx);
-                        assert(lit_is_assigned(other_watch));
                         changed = true;
 
                     }
@@ -240,8 +239,7 @@ bool CDCL::unit_propagate(int& conflict_clause_index)
 
 bool CDCL::lit_is_assigned(int lit)
 {
-    auto it = var_conditions.find(abs(lit));
-    return (it != var_conditions.end());
+    return (var_conditions[abs(lit)].active == true);
 }
 
 //============================================================
@@ -296,9 +294,7 @@ std::vector<int> CDCL::analyze_conflict(int conflict_clause_ind)
                 seen_vars.insert(new_var);
                 new_clause2.insert(new_var);
                 if (var_conditions[new_var].level == current_level)
-                {
                     current_level_vars.push(new_var);
-                }
             }
         }
         new_clause2.erase(var);
@@ -326,6 +322,7 @@ std::array<int, 2> CDCL::compute_backjump_level(const std::vector<int>& learned_
     {
         int var = abs(learned_clause[i]);
         assert(lit_is_assigned(var));
+
         int level = var_conditions[var].level;
         if (level > max_level)
         {
@@ -358,7 +355,7 @@ void CDCL::backjump(int new_level)
         assert(lit_is_assigned(var));
         if (var_conditions[var].level <= new_level)
             break;
-        var_conditions.erase(var);
+        var_conditions[var].active = false;
         condition_stack.pop();
     }
     current_level = new_level;

@@ -1,14 +1,16 @@
 class CDCL {
 public:
-    CDCL(std::vector<std::vector<int>>& cnf, int variable_amount);
+    CDCL(std::vector<std::vector<int>>& cnf, int variable_amount, int clause_amount);
     bool process_algorithm();
     ~CDCL() = default;
 
 private:
+    size_t variable_amount;
+    size_t clause_amount;
     std::deque<int> propagation_queue;
     std::vector<Clause> clauses;
-    std::unordered_map<int, std::vector<int>> watched_map;
-    std::unordered_map<int, assignment_info> var_conditions;
+    std::vector<std::vector<int>> watched_map;
+    std::vector<assignment_info> var_conditions;
     std::stack<int> condition_stack;
     int current_level;
     std::vector<double> activity;

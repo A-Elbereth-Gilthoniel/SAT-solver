@@ -2,6 +2,7 @@ struct assignment_info {
     bool value;
     int level;
     int reason_clause_index;
+    bool active;
 };
 
 struct Clause {

@@ -13,7 +13,7 @@ int main(int argc, const char* argv[])
     if (clause_amount == 0)
         return 1;
 
-    CDCL* sat_solver = new CDCL(clauses, variable_amount);
+    CDCL* sat_solver = new CDCL(clauses, variable_amount, clause_amount);
 
     if (sat_solver->process_algorithm() == true)
         std::cout << "SAT" << std::endl;
